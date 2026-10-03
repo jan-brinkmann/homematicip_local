@@ -52,6 +52,12 @@ This logic is implemented in AioHomematicGenericEntity._do_remove_name.
 - Entities that do not have their own distinct name (after the above processing) are considered to "use the device name" in HA. This is exposed via the property use_device_name.
 
 ## Special cases
+- HmIP-HAP JS1 system button light: The entity uses the HA `system_button_light`
+  translation directly: "System button" in English and "Systemtaste" in German.
+  An already translated backend parameter name, such as "Helligkeit der
+  Systemtaste", is not used as the entity label. User-defined HA entity names
+  continue to take precedence. Renaming the default label does not change an
+  existing entity ID or unique ID.
 - Sub-device grouping: When enable_sub_devices is on and the device has grouped channels, the device name shown in HA will denote the group as described above. Entity names will use the parameter part only to avoid repeated device/group info.
 - Custom entity mappings: Some complex devices map multiple data points into specialized entities (e.g., climate, cover). The naming rules still apply after removing duplicated device names and translating parameter names.
 
@@ -76,4 +82,3 @@ Note: These examples illustrate typical outcomes. Actual wording may vary with y
 ## Tips
 - To control the names, prefer naming your devices and channels on the CCU. The integration will pick those up.
 - If a translation appears odd or redundant, check HA’s translation files for the platform; some names are intentionally empty to let the UI focus on the device name.
-

@@ -9,6 +9,7 @@ from aiohomematic.const import DataPointCategory, DataPointType
 from aiohomematic.model.custom import (
     FIXED_COLOR_TO_HS_CONVERTER,
     CustomDpDimmer,
+    CustomDpSystemButtonLight,
     LightOffArgs,
     LightOnArgs,
     SoundPlayerLedOnArgs,
@@ -21,15 +22,18 @@ from homeassistant.components.light import (
     ATTR_HS_COLOR,
     ATTR_TRANSITION,
     LightEntity,
+    LightEntityDescription,
 )
 from homeassistant.components.light.const import ColorMode, LightEntityFeature
 from homeassistant.const import STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.typing import UndefinedType
 
 from . import HomematicConfigEntry
-from .backend_types import CUSTOM_DP_IP_FIXED_COLOR_LIGHT, CUSTOM_DP_SOUND_PLAYER_LED
+from .backend_types import CUSTOM_DP_IP_FIXED_COLOR_LIGHT, CUSTOM_DP_SOUND_PLAYER_LED, is_system_button_light
 from .control_unit import ControlUnit, signal_new_data_point
 from .generic_entity import AioHomematicGenericEntity, AioHomematicGenericRestoreEntity
 from .services import ATTR_AVAILABLE_COLORS
@@ -52,15 +56,14 @@ async def async_setup_entry(
     control_unit: ControlUnit = entry.runtime_data
 
     @callback
-    def async_add_light(data_points: tuple[CustomDpDimmer, ...]) -> None:
+    def async_add_light(data_points: tuple[CustomDpDimmer | CustomDpSystemButtonLight, ...]) -> None:
         """Add light from Homematic(IP) Local for OpenCCU."""
         _LOGGER.debug("ASYNC_ADD_LIGHT: Adding %i data points", len(data_points))
 
         if entities := [
-            AioHomematicLight(
-                control_unit=control_unit,
-                data_point=data_point,
-            )
+            AioHomematicSystemButtonLight(control_unit=control_unit, data_point=data_point)
+            if is_system_button_light(data_point)
+            else AioHomematicLight(control_unit=control_unit, data_point=data_point)
             for data_point in data_points
         ]:
             async_add_entities(entities)
@@ -74,6 +77,48 @@ async def async_setup_entry(
     )
 
     async_add_light(data_points=control_unit.get_new_data_points(data_point_type=DataPointType.LIGHT))
+
+
+class AioHomematicSystemButtonLight(AioHomematicGenericEntity[CustomDpSystemButtonLight], LightEntity):
+    """Represent the MASTER-backed system button illumination as an on/off light."""
+
+    entity_description = LightEntityDescription(
+        key="system_button_light",
+        translation_key="system_button_light",
+        entity_category=EntityCategory.CONFIG,
+    )
+    _attr_color_mode = ColorMode.ONOFF
+    _attr_supported_color_modes = {ColorMode.ONOFF}
+    _attr_supported_features = LightEntityFeature(0)
+
+    @property
+    @override
+    def is_on(self) -> bool | None:
+        """Return the confirmed state, preserving an unknown initial value."""
+        return self._data_point.is_on
+
+    @property
+    @override
+    def name(self) -> str | UndefinedType | None:
+        """Use the entity translation directly, independently of the backend name."""
+        if not self.platform_data:
+            return self.entity_description.name
+        return self._name_internal(
+            self._device_class_name,
+            self.platform_data.platform_translations,
+        )
+
+    @override
+    @handle_homematic_errors
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Disable the system button illumination."""
+        await self._data_point.turn_off()
+
+    @override
+    @handle_homematic_errors
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Enable the system button illumination."""
+        await self._data_point.turn_on()
 
 
 class AioHomematicLight(AioHomematicGenericRestoreEntity[CustomDpDimmer], LightEntity):
