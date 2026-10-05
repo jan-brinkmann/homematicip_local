@@ -4,6 +4,14 @@
 
 ### Integration
 
+- **HmIP-HAP JS1 system button illumination.** The device gains a configuration
+  light named "System button" (German: "Systemtaste") with an on/off toggle and
+  no brightness slider. The name uses HA translations directly, including when
+  the backend parameter name is already translated. ON writes MASTER
+  `SIGNAL_BRIGHTNESS` 1.0; OFF writes 0.0. Intermediate settings remain editable
+  through Device Configuration and appear as ON after refresh. Requires the
+  corresponding local aiohomematic feature; the release dependency pin is pending.
+  See `UPDATE.md` for synchronization and release considerations.
 - **openccu-loom: connect through an openccu-lite box.** A daemon running
   on an openccu-lite box (openccu-lite 1.0.0-dev.36 or newer) can now be
   reached through the box's web server (`https://<box>/addons/loom/`), so

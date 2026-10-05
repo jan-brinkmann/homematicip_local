@@ -32,7 +32,7 @@ aiohomematic class alone, so a CCU-only install is unaffected.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, TypeIs, cast
 
 from aiohomematic.model.custom import (
     CustomDpBlind,
@@ -45,6 +45,7 @@ from aiohomematic.model.custom import (
     CustomDpSoundPlayer,
     CustomDpSoundPlayerLed,
     CustomDpSwitch,
+    CustomDpSystemButtonLight,
 )
 from aiohomematic.model.generic import DpAction, DpButton, DpSwitch
 from aiohomematic.model.hub import ProgramDpSwitch, SysvarDpSwitch
@@ -73,6 +74,15 @@ else:
 
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def is_system_button_light(data_point: object) -> TypeIs[CustomDpSystemButtonLight]:
+    """Match the direct-backend light until loom provides this new data point.
+
+    The pinned loom client has no system button light twin. Keep this deliberate
+    direct-only dispatch here with the other backend class checks; see UPDATE.md.
+    """
+    return isinstance(data_point, CustomDpSystemButtonLight)
 
 
 def _pair[T](aio_cls: type[T], loom_attr: str, loom_module: object | None) -> tuple[type[T], ...]:

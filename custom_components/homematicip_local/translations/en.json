@@ -350,6 +350,11 @@
         }
       }
     },
+    "light": {
+      "system_button_light": {
+        "name": "System button"
+      }
+    },
     "number": {
       "pipe_level": {
         "name": "Valve opening"

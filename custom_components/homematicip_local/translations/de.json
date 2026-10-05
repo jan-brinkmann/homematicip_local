@@ -350,6 +350,11 @@
                 }
             }
         }, 
+        "light": {
+            "system_button_light": {
+                "name": "Systemtaste"
+            }
+        }, 
         "number": {
             "pipe_level": {
                 "name": "Ventil-Öffnungsgrad"

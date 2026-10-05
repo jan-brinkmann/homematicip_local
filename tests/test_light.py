@@ -7,12 +7,15 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
+from aiohomematic.const import DataPointCategory, DataPointUsage
+from aiohomematic.model.custom import CustomDpSystemButtonLight
 from custom_components.homematicip_local.light import (
     ATTR_CHANNEL_BRIGHTNESS,
     ATTR_CHANNEL_COLOR,
     ATTR_COLOR,
     ATTR_LAST_BRIGHTNESS,
     AioHomematicLight,
+    AioHomematicSystemButtonLight,
     async_setup_entry,
 )
 from homeassistant.components.light import (
@@ -26,6 +29,9 @@ from homeassistant.components.light import (
 from homeassistant.components.light.const import ColorMode, LightEntityFeature
 from homeassistant.const import STATE_OFF, STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
+from homeassistant.helpers.translation import async_get_translations
+from homeassistant.helpers.typing import UNDEFINED
 
 
 def _is_fixed_color_light_class(obj: Any, cls: Any) -> bool:
@@ -693,6 +699,110 @@ class TestAsyncSetupEntry:
         # Verify entities were passed
         call_args = mock_async_add_entities.call_args[0][0]
         assert len(call_args) == 1
+
+
+class TestAioHomematicSystemButtonLight:
+    """Check the on/off wrapper without changing the existing dimmer wrapper."""
+
+    async def test_commands(self) -> None:
+        """Forward only on/off commands, ignoring unsupported light arguments."""
+        light = object.__new__(AioHomematicSystemButtonLight)
+        light._data_point = MagicMock(spec=CustomDpSystemButtonLight)
+        light._data_point.turn_on = AsyncMock()
+        light._data_point.turn_off = AsyncMock()
+        await light.async_turn_on(brightness=128, transition=5)
+        await light.async_turn_off(transition=5)
+        light._data_point.turn_on.assert_awaited_once_with()
+        light._data_point.turn_off.assert_awaited_once_with()
+
+    @pytest.mark.parametrize(
+        ("language", "backend_name", "expected_name"),
+        [
+            ("en", "Test HAP Signal Brightness", "System button"),
+            ("en", "Test HAP System button brightness", "System button"),
+            ("de", "Test HAP Signal Brightness", "Systemtaste"),
+            ("de", "Test HAP Helligkeit der Systemtaste", "Systemtaste"),
+        ],
+    )
+    async def test_dispatch_and_registry_metadata(
+        self, hass: HomeAssistant, language: str, backend_name: str, expected_name: str
+    ) -> None:
+        """Create the separate wrapper using the normal generic entity constructor."""
+        data_point = MagicMock(spec=CustomDpSystemButtonLight)
+        data_point.unique_id = "vcu9000001_0"
+        data_point.category = DataPointCategory.LIGHT
+        data_point.usage = DataPointUsage.CDP_PRIMARY
+        data_point.enabled_default = True
+        data_point.additional_information = {}
+        data_point.translated_name = backend_name
+        data_point.name_data.parameter_name = "SIGNAL_BRIGHTNESS"
+        data_point.device.name = "Test HAP"
+        data_point.device.model = "HmIP-HAP JS1"
+        data_point.device.address = "VCU9000001"
+        data_point.device.interface_id = "test-HmIP-RF"
+        data_point.device.manufacturer = "eQ-3"
+        data_point.device.model_description = "HmIP-HAP JS1"
+        data_point.device.firmware = "3.0.18"
+        data_point.device.room = None
+        data_point.device.week_profile_data_point = None
+        data_point.channel.address = "VCU9000001:0"
+        data_point.is_on = None
+        data_point.available = True
+        data_point.is_valid = False
+        control = MagicMock()
+        control.enable_sub_devices = False
+        control.device_identifier.return_value = "test-HmIP-RF_VCU9000001"
+        control.device_configuration_url.return_value = "http://example.invalid/device"
+        control.ensure_via_device_exists.return_value = None
+        control.get_new_data_points.return_value = (data_point,)
+        entry = MagicMock()
+        entry.runtime_data = control
+        entry.entry_id = "test_entry"
+        added = Mock()
+        with (
+            patch("custom_components.homematicip_local.light.async_dispatcher_connect"),
+            patch("custom_components.homematicip_local.generic_entity.get_data_point", return_value=data_point),
+        ):
+            await async_setup_entry(hass, entry, added)
+        light = added.call_args.args[0][0]
+        assert isinstance(light, AioHomematicSystemButtonLight)
+        assert light.unique_id == "homematicip_local_vcu9000001_0"
+        assert light.device_info["identifiers"] == {("homematicip_local", "test-HmIP-RF_VCU9000001")}
+        assert light.device_info["name"] == "Test HAP"
+        assert light.device_info["model"] == "HmIP-HAP JS1"
+        assert light.is_on is None
+        assert light.entity_registry_enabled_default is True
+        assert light.name is UNDEFINED
+        light.platform_data = MagicMock()
+        light.platform_data.platform_name = "homematicip_local"
+        light.platform_data.domain = "light"
+        light.platform_data.platform_translations = await async_get_translations(
+            hass, language, "entity", {"homematicip_local"}, config_flow=False
+        )
+        assert light.name == expected_name
+
+    @pytest.mark.parametrize("is_on", [False, True, None])
+    def test_state_and_capabilities(self, is_on: bool | None) -> None:
+        """Keep unknown state and advertise only ONOFF."""
+        light = object.__new__(AioHomematicSystemButtonLight)
+        light._data_point = MagicMock(spec=CustomDpSystemButtonLight)
+        light._data_point.is_on = is_on
+        light._data_point.available = True
+        assert light.is_on is is_on
+        assert light.available is True
+        assert light.color_mode == ColorMode.ONOFF
+        assert light.supported_color_modes == {ColorMode.ONOFF}
+        assert light.supported_features == LightEntityFeature(0)
+        assert light.brightness is None
+        assert light.effect is None
+        assert light.effect_list is None
+        assert light.hs_color is None
+        assert light.color_temp_kelvin is None
+        assert light.entity_category == EntityCategory.CONFIG
+        assert light.translation_key == "system_button_light"
+        assert light.should_poll is False
+        light._data_point.available = False
+        assert light.available is False
 
 
 class TestAioHomematicLightMinMaxColorTemp:

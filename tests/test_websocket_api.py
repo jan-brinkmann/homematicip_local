@@ -564,6 +564,51 @@ class TestWsPutParamset:
         assert response["success"] is False
         assert response["error"]["code"] == "write_failed"
 
+    async def test_system_button_intermediate_value(
+        self,
+        hass: HomeAssistant,
+        mock_loaded_config_entry: MockConfigEntry,
+        hass_ws_client: Any,
+        mock_facade: Mock,
+    ) -> None:
+        """Keep an arbitrary HAP MASTER float unchanged through the panel API."""
+        control: ControlUnit = mock_loaded_config_entry.runtime_data
+        control.central.configuration = mock_facade
+        mock_facade.get_paramset = AsyncMock(return_value={"SIGNAL_BRIGHTNESS": 0.5})
+        control.central.device_coordinator.get_device = Mock(
+            return_value=MockDevice(
+                address="VCU9000001",
+                interface_id="hmip_local-HmIP-RF",
+                model="HmIP-HAP JS1",
+                name="Test HAP",
+                firmware="3.0.18",
+            )
+        )
+        client = await hass_ws_client(hass)
+        message = {
+            "entry_id": mock_loaded_config_entry.entry_id,
+            "interface_id": "hmip_local-HmIP-RF",
+            "channel_address": "VCU9000001:0",
+            "paramset_key": "MASTER",
+        }
+        await client.send_json(
+            {"id": 1, "type": "homematicip_local/config/put_paramset", **message, "values": {"SIGNAL_BRIGHTNESS": 0.5}}
+        )
+        response = await client.receive_json()
+        assert response["success"] is True
+        assert response["result"]["success"] is True
+        mock_facade.put_paramset.assert_awaited_once_with(
+            interface_id="hmip_local-HmIP-RF",
+            channel_address="VCU9000001:0",
+            paramset_key=ParamsetKey.MASTER,
+            values={"SIGNAL_BRIGHTNESS": 0.5},
+            validate=True,
+        )
+        await client.send_json({"id": 2, "type": "homematicip_local/config/get_paramset", **message})
+        response = await client.receive_json()
+        assert response["success"] is True
+        assert response["result"]["values"] == {"SIGNAL_BRIGHTNESS": 0.5}
+
 
 class TestWsSessionLifecycle:
     """Tests for ConfigSession WebSocket commands."""
